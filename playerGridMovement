@@ -690,9 +690,8 @@ class GameServer {
                         _events.emit(NpcMemoryChanged(cmd.playerId, newMemory))
                         _events.emit(QuestStateChanged(cmd.playerId, QuestState.GOOD_END))
                         _events.emit(ServerMessage(cmd.playerId, "Алхимик получил траву и выдал тебе золото"))
-
-                        // ДОБАВЛЕНО: событие победы
-                        _events.emit(VictoryEvent(cmd.playerId, "Победа! Квест выполнен!"))
+                        
+                        _events.emit(VictoryEvent(cmd.playerId, "Ты победил"))
                     }
 
                     else -> {
@@ -725,9 +724,9 @@ class HudState{
     val playerSnapShot = mutableStateOf(initialPlayerState("Oleg"))
 
     val log = mutableStateOf<List<String>>(emptyList())
-
-    // ДОБАВЛЕНО: состояние победного экрана
+    
     val showVictoryPanel = mutableStateOf(false)
+    
     val victoryMessage = mutableStateOf("")
 }
 
@@ -786,7 +785,7 @@ fun eventToText(e: GameEvent): String{
         is InteractedWithChest -> "InteractedWithChest ${e.chestId}"
         is GoldCountChanged -> "GoldCountChanged ${e.newCount}"
         is ServerMessage -> "Server: ${e.text}"
-        is VictoryEvent -> "🏆 VICTORY! ${e.message}"
+        is VictoryEvent -> "VictoryEvent: ${e.message}"
     }
 }
 
@@ -1119,7 +1118,7 @@ fun main() = KoolApplication {
                     .padding(32.dp)
 
                 Column {
-                    Text("ПОБЕДА") {
+                    Text(" ПОБЕДА! ") {
                         modifier.margin(bottom = 16.dp)
                     }
                     Text(hud.victoryMessage.use()) {
@@ -1130,3 +1129,8 @@ fun main() = KoolApplication {
         }
     }
 }
+
+
+// 1.1 - спросил у дипсика, он сказал, что он любит котлин                                                                                          (а ведь юра для этой контрольной вспоминал, что такое супермарио)
+// 1.2 - так уж и быть, отвечу с, безудержно веселясь
+// 1.3 - https://avatars.mds.yandex.net/i?id=47572f08458e83ed80f53a7fa7a98f27_l-8199228-images-thumbs&n=13 (ладно, d)
