@@ -1,0 +1,30 @@
+package string_counter
+
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.io.File
+
+@Serializable
+data class LineCountResult(
+    val fileName: String,
+    val lineCount: Int,
+    val absolutePath: String
+)
+
+fun main() {
+    print("Введи путь в файлу: ")
+    val path = readLine()?.trim()
+
+    val file = File(path)
+
+    val lines = file.readLines()
+    val lineCount = lines.size
+
+    val result = LineCountResult(file.name, lineCount, file.absolutePath)
+
+    val json = Json { prettyPrint = true }
+    val jsonOutput = json.encodeToString(LineCountResult.serializer(), result)
+
+    println("\nТо, что надо (Мистер Вайт):")
+    println(jsonOutput)
+}
