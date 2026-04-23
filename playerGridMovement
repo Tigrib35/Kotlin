@@ -117,7 +117,10 @@ data class PlayerState(
     val currentAreaId: String?,
     val hintText: String,
 
-    val facing: Facing
+    val facing: Facing,
+    
+    val health: Int,
+    val maxHealth: Int
 )
 
 fun initialPlayerState(playerId: String): PlayerState {
@@ -137,7 +140,9 @@ fun initialPlayerState(playerId: String): PlayerState {
             ),
             null,
             "Подойди к одной из локаций",
-            Facing.FORWARD
+            Facing.FORWARD,
+            100,  
+            100   
         )
     }else{
         PlayerState(
@@ -155,7 +160,9 @@ fun initialPlayerState(playerId: String): PlayerState {
             ),
             null,
             "Подойди к одной из локаций",
-            Facing.FORWARD
+            Facing.FORWARD,
+            100,
+            100
         )
     }
 }
@@ -270,11 +277,17 @@ data class CmdResetPlayer(
     override val playerId: String
 ): GameCommand
 
+
+data class CmdDamagePlayer(
+    override val playerId: String,
+    val amount: Int
+): GameCommand
+
 sealed interface GameEvent{
     val playerId: String
 }
 
-// ДОБАВЛЕНО: событие победы
+
 data class VictoryEvent(
     override val playerId: String,
     val message: String
@@ -341,6 +354,13 @@ data class MovedBlocked(
     override val playerId: String,
     val blockedX: Int,
     val blockedZ: Int
+): GameEvent
+
+
+data class HealthChanged(
+    override val playerId: String,
+    val newHealth: Int,
+    val maxHealth: Int
 ): GameEvent
 
 class GameServer {
@@ -439,7 +459,7 @@ class GameServer {
 
     private fun nearestObject(player: PlayerState): WorldObjectDef? {
         val px = player.gridX.toFloat()
-        val pz = player.gridZ.toFloat()  // исправлено: было gridX
+        val pz = player.gridZ.toFloat()
 
         val candidates = worldObjects.filter { obj ->
             distance2D(px, pz, obj.cellX.toFloat(), obj.cellZ.toFloat()) <= obj.interactRadius
@@ -690,7 +710,7 @@ class GameServer {
                         _events.emit(NpcMemoryChanged(cmd.playerId, newMemory))
                         _events.emit(QuestStateChanged(cmd.playerId, QuestState.GOOD_END))
                         _events.emit(ServerMessage(cmd.playerId, "Алхимик получил траву и выдал тебе золото"))
-                        
+
                         _events.emit(VictoryEvent(cmd.playerId, "Ты победил"))
                     }
 
@@ -712,6 +732,21 @@ class GameServer {
                     _events.emit(ServerMessage(cmd.playerId, "Игрок ${cmd.newPlayerId} не найден"))
                 }
             }
+
+
+            is CmdDamagePlayer -> {
+                val player = getPlayerData(cmd.playerId)
+                val newHealth = (player.health - cmd.amount).coerceIn(0, player.maxHealth)
+                if (newHealth != player.health) {
+                    updatePlayer(cmd.playerId) { p ->
+                        p.copy(health = newHealth)
+                    }
+                    _events.emit(HealthChanged(cmd.playerId, newHealth, player.maxHealth))
+                    _events.emit(ServerMessage(cmd.playerId, "Получен урон ${cmd.amount}. Здоровье: $newHealth/${player.maxHealth}"))
+                } else {
+                    _events.emit(ServerMessage(cmd.playerId, "Урон не нанесён (уже 0 здоровья)"))
+                }
+            }
         }
     }
 }
@@ -724,9 +759,9 @@ class HudState{
     val playerSnapShot = mutableStateOf(initialPlayerState("Oleg"))
 
     val log = mutableStateOf<List<String>>(emptyList())
-    
+
     val showVictoryPanel = mutableStateOf(false)
-    
+
     val victoryMessage = mutableStateOf("")
 }
 
@@ -786,6 +821,7 @@ fun eventToText(e: GameEvent): String{
         is GoldCountChanged -> "GoldCountChanged ${e.newCount}"
         is ServerMessage -> "Server: ${e.text}"
         is VictoryEvent -> "VictoryEvent: ${e.message}"
+        is HealthChanged -> "HealthChanged: ${e.newHealth} / ${e.maxHealth} (${e.newHealth * 100 / e.maxHealth}%)"
     }
 }
 
@@ -990,6 +1026,12 @@ fun main() = KoolApplication {
                 Text(currentObjective(player)) { modifier.font(sizes.smallText) }
                 Text(formatInventory(player)) { modifier.font(sizes.smallText).margin(bottom = sizes.smallGap) }
                 Text("Gold: ${player.gold}") { modifier.font(sizes.smallText) }
+                
+                val healthPercent = (player.health * 100 / player.maxHealth)
+                Text("Здоровье: $healthPercent% (${player.health}/${player.maxHealth})") {
+                    modifier.font(sizes.smallText).margin(bottom = sizes.smallGap)
+                }
+
                 Text("Hint: ${player.hintText}") { modifier.font(sizes.smallText) }
                 Text("Npc Memory: ${formatMemory(player.alchemistMemory)}") {
                     modifier.font(sizes.smallText).margin(bottom = sizes.smallGap)
@@ -1076,6 +1118,11 @@ fun main() = KoolApplication {
                             server.trySend(CmdInteract(player.playerId))
                         }
                     }
+                    Button("Урон -10") {
+                        modifier.margin(end = 8.dp).onClick {
+                            server.trySend(CmdDamagePlayer(player.playerId, 10))
+                        }
+                    }
                 }
 
                 Text(dialogue.npcId) { modifier.margin(top = sizes.gap) }
@@ -1131,6 +1178,10 @@ fun main() = KoolApplication {
 }
 
 
-// 1.1 - спросил у дипсика, он сказал, что он любит котлин                                                                                          (а ведь юра для этой контрольной вспоминал, что такое супермарио)
-// 1.2 - так уж и быть, отвечу с, безудержно веселясь
-// 1.3 - https://avatars.mds.yandex.net/i?id=47572f08458e83ed80f53a7fa7a98f27_l-8199228-images-thumbs&n=13 (ладно, d)
+
+
+
+// 1.1 - прикинь, а
+// 1.2 - (с)кибиди
+// 1.3 - dddddddddddddddddddddddddddddddddddddddddd
+// 1.4 - bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
