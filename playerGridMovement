@@ -1,4 +1,4 @@
-package playerGridMovement
+package proekt_kakoy_raz
 
 import de.fabmax.kool.KoolApplication
 import de.fabmax.kool.addScene
@@ -118,7 +118,7 @@ data class PlayerState(
     val hintText: String,
 
     val facing: Facing,
-    
+
     val health: Int,
     val maxHealth: Int
 )
@@ -141,8 +141,8 @@ fun initialPlayerState(playerId: String): PlayerState {
             null,
             "Подойди к одной из локаций",
             Facing.FORWARD,
-            100,  
-            100   
+            100,
+            100
         )
     }else{
         PlayerState(
@@ -205,7 +205,7 @@ fun buildAlchemistDialogue(player: PlayerState): DialogueView{
             if (herbs < 3){
                 DialogueView(
                     "Алхимик",
-                    "Недостаточно, надо $herbs/4 травы",
+                    "Недостаточно, надо $herbs/3 травы",
                     emptyList()
                 )
             }else{
@@ -213,7 +213,7 @@ fun buildAlchemistDialogue(player: PlayerState): DialogueView{
                     "Алхимик",
                     "найс, прет как белый, давай сюда",
                     listOf(
-                        DialogueOption("give_herb", "Отдать 4 травы")
+                        DialogueOption("give_herb", "Отдать 3 травы")
                     )
                 )
             }
@@ -363,6 +363,13 @@ data class HealthChanged(
     val maxHealth: Int
 ): GameEvent
 
+data class TakeDamage(
+    override val playerId: String,
+    val amount: Int,
+    val newHealth: Int,
+    val maxHealth: Int
+): GameEvent
+
 class GameServer {
 
     private val minX = -5
@@ -477,12 +484,14 @@ class GameServer {
         val oldAreaId = player.currentAreaId
         val newAreaId = nearest?.id
 
-        if (oldAreaId != null){
-            _events.emit(LeftArea(playerId, oldAreaId))
-        }
+        if (oldAreaId != newAreaId) {
+            if (oldAreaId != null) {
+                _events.emit(LeftArea(playerId, oldAreaId))
+            }
 
-        if (newAreaId != null){
-            _events.emit(EnteredArea(playerId, newAreaId))
+            if (newAreaId != null) {
+                _events.emit(EnteredArea(playerId, newAreaId))
+            }
         }
 
         val newHint =
@@ -575,7 +584,7 @@ class GameServer {
 
                 when (obj.type){
                     WorldObjectType.ALCHEMIST -> {
-                        if (player.alchemistMemory.sawPlayerNearSource){
+                        if (player.alchemistMemory.sawPlayerNearSource && randomChance(0.5f)){
                             _events.emit(ServerMessage(cmd.playerId, "Так... ты тут был... ааа трава-то, где?"))
                             return
                         }else{
@@ -631,7 +640,7 @@ class GameServer {
                         }
 
                         val oldCountGold = player.gold
-                        val newCountGold = oldCountGold + 1
+                        val newCountGold = oldCountGold + 10
 
                         updatePlayer(cmd.playerId) { p ->
                             p.copy(gold = newCountGold)
@@ -656,8 +665,8 @@ class GameServer {
 
                 when(cmd.optionId){
                     "accept_help" -> {
-                        val radiusHerb = distance2D(player.gridX.toFloat(), player.gridZ.toFloat(), 3f, 0f)
-                        if (radiusHerb <= 1.7f){
+                        val radiusToAlchemist = distance2D(player.gridX.toFloat(), player.gridZ.toFloat(), 3f, 0f)
+                        if (radiusToAlchemist <= 1.7f){
                             if (player.questState != QuestState.START){
                                 _events.emit(ServerMessage(cmd.playerId, "Путь помощи можно выбрать только в начале квеста"))
                                 return
@@ -733,7 +742,6 @@ class GameServer {
                 }
             }
 
-
             is CmdDamagePlayer -> {
                 val player = getPlayerData(cmd.playerId)
                 val newHealth = (player.health - cmd.amount).coerceIn(0, player.maxHealth)
@@ -751,7 +759,7 @@ class GameServer {
     }
 }
 
-class HudState{
+class HudState(){
     val activePlayerIdFlow = MutableStateFlow("Oleg")
 
     val activePLayerIdUi = mutableStateOf("Oleg")
@@ -763,6 +771,10 @@ class HudState{
     val showVictoryPanel = mutableStateOf(false)
 
     val victoryMessage = mutableStateOf("")
+
+    val currentHealth = mutableStateOf()
+                                                                                                                                       //Юра, сорян, но я реально не понимаю, как это делат (просто мозга не работает) я хочу жить, не бань пажалуста 🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻🙏🏻
+    val maxHealth = mutableStateOf(100)
 }
 
 fun hudLog(hud: HudState, line: String){
@@ -805,7 +817,6 @@ fun formatMemory(memory: NpcMemory): String{
     return "Встретился = ${memory.hasMet}, Сколько раз поговорил = ${memory.timesTalked}, отдал траву = ${memory.receivedHerb}"
 }
 
-
 fun eventToText(e: GameEvent): String{
     return when(e){
         is PlayerMoved -> "PlayerMoved (${e.newGridX}, ${e.newGridZ})"
@@ -821,7 +832,8 @@ fun eventToText(e: GameEvent): String{
         is GoldCountChanged -> "GoldCountChanged ${e.newCount}"
         is ServerMessage -> "Server: ${e.text}"
         is VictoryEvent -> "VictoryEvent: ${e.message}"
-        is HealthChanged -> "HealthChanged: ${e.newHealth} / ${e.maxHealth} (${e.newHealth * 100 / e.maxHealth}%)"
+        is HealthChanged -> "HealthChanged: ${e.newHealth} / ${e.maxHealth}"
+        is TakeDamage -> "TakeDamage: ${e.amount} урона, осталось ${e.newHealth}/${e.maxHealth}"
     }
 }
 
@@ -928,6 +940,14 @@ fun main() = KoolApplication {
                     delay(5000)
                     hud.showVictoryPanel.value = false
                 }
+                if (event is TakeDamage && event.playerId == hud.activePlayerIdFlow.value) {
+                    hud.currentHealth.value = event.newHealth
+                    hud.maxHealth.value = event.maxHealth
+                }
+                if (event is HealthChanged && event.playerId == hud.activePlayerIdFlow.value) {
+                    hud.currentHealth.value = event.newHealth
+                    hud.maxHealth.value = event.maxHealth
+                }
             }
         }
 
@@ -991,6 +1011,8 @@ fun main() = KoolApplication {
             }
             .onEach { player ->
                 hud.playerSnapShot.value = player
+                hud.currentHealth.value = player.health
+                hud.maxHealth.value = player.maxHealth
             }
             .launchIn(coroutineScope)
 
@@ -1009,7 +1031,7 @@ fun main() = KoolApplication {
         addPanelSurface {
             modifier
                 .align(AlignmentX.Start, AlignmentY.Top)
-                .margin(16.dp)
+                .margin(0.dp)
                 .background(RoundRectBackground(Color(0f, 0f, 0f, 0.6f), 14.dp))
                 .padding(12.dp)
 
@@ -1026,15 +1048,13 @@ fun main() = KoolApplication {
                 Text(currentObjective(player)) { modifier.font(sizes.smallText) }
                 Text(formatInventory(player)) { modifier.font(sizes.smallText).margin(bottom = sizes.smallGap) }
                 Text("Gold: ${player.gold}") { modifier.font(sizes.smallText) }
-                
-                val healthPercent = (player.health * 100 / player.maxHealth)
-                Text("Здоровье: $healthPercent% (${player.health}/${player.maxHealth})") {
-                    modifier.font(sizes.smallText).margin(bottom = sizes.smallGap)
-                }
-
                 Text("Hint: ${player.hintText}") { modifier.font(sizes.smallText) }
                 Text("Npc Memory: ${formatMemory(player.alchemistMemory)}") {
                     modifier.font(sizes.smallText).margin(bottom = sizes.smallGap)
+                }
+
+                Row {
+
                 }
 
                 Row {
@@ -1118,7 +1138,7 @@ fun main() = KoolApplication {
                             server.trySend(CmdInteract(player.playerId))
                         }
                     }
-                    Button("Урон -10") {
+                    Button("Отнять здоровье") {
                         modifier.margin(end = 8.dp).onClick {
                             server.trySend(CmdDamagePlayer(player.playerId, 10))
                         }
@@ -1157,7 +1177,44 @@ fun main() = KoolApplication {
             }
         }
 
-        if (hud.showVictoryPanel.value) {
+        addPanelSurface {
+            modifier
+                .align(AlignmentX.End, AlignmentY.Bottom)
+                .margin(16.dp)
+                .width(150.dp)
+                .height(50.dp)
+                .background(RoundRectBackground(Color(0f, 0f, 0f, 0.7f), 8.dp))
+                .padding(8.dp)
+
+            Column {
+                Text("Здоровье: ${hud.currentHealth.value}/${hud.maxHealth.value}") {
+                    modifier.margin(bottom = 4.dp)
+                }
+
+                Box {
+                    modifier
+                        .width(134.dp)
+                        .height(20.dp)
+                        .background(RoundRectBackground(Color.WHITE, 4.dp))
+
+                    val healthPercent = if (hud.maxHealth.value > 0) {
+                        (hud.currentHealth.value.toFloat() / hud.maxHealth.value.toFloat()).coerceIn(0f, 1f)
+                    } else 0f
+
+                    val healthWidth = 134.dp * healthPercent
+
+                    Box {
+                        modifier
+                            .align(AlignmentX.Start, AlignmentY.Center)
+                            .width(healthWidth)
+                            .height(20.dp)
+                            .background(RoundRectBackground(Color.RED, 4.dp))
+                    }
+                }
+            }
+        }
+
+        if (hud.showVictoryPanel.value == true) {
             addPanelSurface {
                 modifier
                     .align(AlignmentX.Center, AlignmentY.Center)
@@ -1176,6 +1233,9 @@ fun main() = KoolApplication {
         }
     }
 }
+
+
+
 
 
 
